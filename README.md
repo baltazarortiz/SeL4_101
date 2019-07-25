@@ -1,3 +1,14 @@
+# sel4 Kernel 101 - UART testing
+
+A branch of the minimal seL4\_101 repo that sets up the UART for both input
+and output. Currently WIP.
+
+Use the seL4 10.1.0 release to make sure things are consistent. This can be
+done by following the setup instructions in the original README or by running
+`setup.sh`.
+
+Original README below.
+
 # sel4 Kernel 101
 
 This first article is about the sel4 micro kernel.
