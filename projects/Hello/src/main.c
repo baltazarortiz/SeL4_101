@@ -70,13 +70,15 @@ int main(void)
 	ps_io_ops_t io_ops;
 
 	info = platsupport_get_bootinfo();
-	assert(info != NULL);
+	if (info == NULL) {
+		ZF_LOGF("Failed to get bootinfo\n");
+	}
 
 	simple_default_init_bootinfo(&simple, info);
 
 	allocman = bootstrap_use_current_simple(&simple, ALLOCATOR_STATIC_POOL_SIZE, &allocator_mem_pool);
 	if (allocman == NULL) {
-		ZF_LOGF("Failed to create allocman");
+		ZF_LOGF("Failed to create allocman\n");
 	}
 
 	allocman_make_vka(&vka, allocman);
@@ -98,40 +100,37 @@ int main(void)
 	error = sel4utils_bootstrap_vspace_with_bootinfo_leaky(&vspace, &data,
 			vspace_cap, &vka, info);
 	if (error) {
-		ZF_LOGF("Failed to bootstrap vspace");
+		ZF_LOGF("Failed to bootstrap vspace\n");
 	}
 
 	reservation_t virtual_reservation;
-	/* fill the allocator with virtual memory */
+	// fill the allocator with virtual memory
 	void *vaddr;
 	virtual_reservation = vspace_reserve_range(&vspace,
 			ALLOCATOR_VIRTUAL_POOL_SIZE, seL4_AllRights, 1, &vaddr);
 	if (virtual_reservation.res == 0) {
-		ZF_LOGF("Failed to provide virtual memory for allocator");
+		ZF_LOGF("Failed to provide virtual memory for allocator\n");
 	}
 
 	bootstrap_configure_virtual_pool(allocman, vaddr,
 			ALLOCATOR_VIRTUAL_POOL_SIZE, vspace_cap);
 
 	error = sel4platsupport_new_io_mapper(vspace, vka, &io_ops.io_mapper);
-	assert(error == 0);
+	if (error) {
+		ZF_LOGF("Failed to get new IO mapper\n");
+	}
 
 	error = sel4platsupport_new_malloc_ops(&io_ops.malloc_ops);
-	assert(error == 0);
+	if (error) {
+		ZF_LOGF("Failed to get new malloc ops\n");
+	}
 	//
 	//
 	// needed?
 	//sel4platsupport_init_default_serial_caps(&vka, (vspace_t*)&vspace_cap, &simple, &serial_objects);
-	//platsupport_serial_setup_simple((vspace_t*)&vspace_cap, &simple, &vka);
-	//
-	//error = sel4platsupport_new_io_ops(vspace, vka, &io_ops);
-	//assert(error == 0);
+	platsupport_serial_setup_simple(&vspace, &simple, &vka);
 
-	//ps_chardevice_t devserial;
-	//ps_cdev_init(PC99_SERIAL_COM1, &io_ops, &devserial);
-	//uart_init(&dev_defn[0], io_ops, devserial);
-	//int res = serial_ready(&devserial);
-	//uart_getchar(&devserial);
+	//int t = __arch_getchar();
 
 	printf("Salut, Monde!\n");
 	return 0;
