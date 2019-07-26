@@ -6,21 +6,35 @@
 #include <assert.h>
 
 #include <sel4/sel4.h>
+
 #include <simple/simple.h>
 #include <simple-default/simple-default.h>
-
-#include <vka/object.h>
 
 #include <allocman/allocman.h>
 #include <allocman/bootstrap.h>
 #include <allocman/vka.h>
 
+#include <vka/object.h>
+#include <vka/capops.h>
+
+//#include <sel4platsupport/device.h>
 #include <sel4platsupport/platsupport.h>
 #include <sel4platsupport/serial.h>
-#include <sel4platsupport/bootinfo.h>
+//#include <sel4platsupport/bootinfo.h>
+#include <sel4platsupport/io.h>
+
+#include <sel4utils/vspace.h>
+//#include <sel4utils/stack.h>
+//#include <sel4utils/process.h>
+//#include <sel4test/test.h>
 
 #include <platsupport/chardev.h>
 #include <platsupport/serial.h>
+#include <platsupport/plat/serial.h>
+
+#include <utils/util.h>
+
+//#include <vspace/vspace.h>
 
 /* global environment variables */
 
@@ -38,21 +52,32 @@ allocman_t *allocman;
 
 serial_objects_t serial_objects;
 
+/* dimensions of virtual memory for the allocator to use */
+#define ALLOCATOR_VIRTUAL_POOL_SIZE ((1 << seL4_PageBits) * 100)
+
 /* static memory for the allocator to bootstrap with */
-#define ALLOCATOR_STATIC_POOL_SIZE (BIT(seL4_PageBits) * 10)
-UNUSED static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
+#define ALLOCATOR_STATIC_POOL_SIZE ((1 << seL4_PageBits) * 20)
+
+static char allocator_mem_pool[ALLOCATOR_STATIC_POOL_SIZE];
+
+/* static memory for virtual memory bootstrapping */
+static sel4utils_alloc_data_t data;
 
 int main(void)
 {
 	// from dynamic-1
 	int error;
+	ps_io_ops_t io_ops;
+
 	info = platsupport_get_bootinfo();
 	assert(info != NULL);
 
 	simple_default_init_bootinfo(&simple, info);
 
 	allocman = bootstrap_use_current_simple(&simple, ALLOCATOR_STATIC_POOL_SIZE, &allocator_mem_pool);
-	assert(allocman != NULL);
+	if (allocman == NULL) {
+		ZF_LOGF("Failed to create allocman");
+	}
 
 	allocman_make_vka(&vka, allocman);
 
@@ -65,13 +90,45 @@ int main(void)
 	vspace_cap = simple_get_pd(&simple);
 
 	// from seL4test
+	// (init_env)
+	/* create a vspace (virtual memory management interface). We pass
+	 * boot info not because it will use capabilities from it, but so
+	 * it knows the address and will add it as a reserved region */
+	vspace_t vspace;
+	error = sel4utils_bootstrap_vspace_with_bootinfo_leaky(&vspace, &data,
+			vspace_cap, &vka, info);
+	if (error) {
+		ZF_LOGF("Failed to bootstrap vspace");
+	}
+
+	reservation_t virtual_reservation;
+	/* fill the allocator with virtual memory */
+	void *vaddr;
+	virtual_reservation = vspace_reserve_range(&vspace,
+			ALLOCATOR_VIRTUAL_POOL_SIZE, seL4_AllRights, 1, &vaddr);
+	if (virtual_reservation.res == 0) {
+		ZF_LOGF("Failed to provide virtual memory for allocator");
+	}
+
+	bootstrap_configure_virtual_pool(allocman, vaddr,
+			ALLOCATOR_VIRTUAL_POOL_SIZE, vspace_cap);
+
+	error = sel4platsupport_new_io_mapper(vspace, vka, &io_ops.io_mapper);
+	assert(error == 0);
+
+	error = sel4platsupport_new_malloc_ops(&io_ops.malloc_ops);
+	assert(error == 0);
+	//
+	//
 	// needed?
 	//sel4platsupport_init_default_serial_caps(&vka, (vspace_t*)&vspace_cap, &simple, &serial_objects);
-	platsupport_serial_setup_simple((vspace_t*)&vspace_cap, &simple, &vka);
+	//platsupport_serial_setup_simple((vspace_t*)&vspace_cap, &simple, &vka);
+	//
+	//error = sel4platsupport_new_io_ops(vspace, vka, &io_ops);
+	//assert(error == 0);
 
-	// Just a test to see if we can access the global variables in chardev.c
-	void *test = &dev_defn;
 	//ps_chardevice_t devserial;
+	//ps_cdev_init(PC99_SERIAL_COM1, &io_ops, &devserial);
 	//uart_init(&dev_defn[0], io_ops, devserial);
 	//int res = serial_ready(&devserial);
 	//uart_getchar(&devserial);
