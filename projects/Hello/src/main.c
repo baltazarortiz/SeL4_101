@@ -127,10 +127,10 @@ int main(void)
 	//
 	//
 	// needed?
-	//sel4platsupport_init_default_serial_caps(&vka, (vspace_t*)&vspace_cap, &simple, &serial_objects);
+	//sel4platsupport_init_default_serial_caps(&vka, &vspace, &simple, &serial_objects);
 	platsupport_serial_setup_simple(&vspace, &simple, &vka);
 
-	//int t = __arch_getchar();
+	char t = getchar();
 
 	printf("Salut, Monde!\n");
 	return 0;
